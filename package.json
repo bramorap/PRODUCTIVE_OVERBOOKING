@@ -1,0 +1,27 @@
+{
+  "name": "productive-overbooking",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n server,vite -c \"bgBlue.white,bgGreen.white\" \"node server.js\" \"vite\"",
+    "build": "vite build",
+    "start": "concurrently -n server,vite -c \"bgBlue.white,bgGreen.white\" \"node server.js\" \"vite\""
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "qs": "^6.12.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.2",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.5.2",
+    "concurrently": "^8.2.2",
+    "postcss": "^8.5.16",
+    "tailwindcss": "^4.3.2",
+    "vite": "^5.3.3"
+  }
+}
