@@ -17,7 +17,7 @@ A local web app for managing overbookings in Productive.io — detects when Bamb
 
 Click the green **Code** button on this page → **Download ZIP**.
 
-Unzip the file and move the folder to your **Documents** folder. Rename it to `PRODUCTIVE_OVERBOOKING` if it isn't already.
+Unzip the file — it will extract as a folder called `PRODUCTIVE-OVERBOOKING-main`. Move that folder to your **Documents** folder (no need to rename it).
 
 ### 2. Open Terminal
 
@@ -26,7 +26,7 @@ Press `Cmd + Space`, type **Terminal**, hit Enter.
 ### 3. Navigate to the project folder
 
 ```
-cd ~/Documents/PRODUCTIVE_OVERBOOKING
+cd ~/Documents/PRODUCTIVE-OVERBOOKING-main
 ```
 
 ### 4. Install dependencies

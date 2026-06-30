@@ -18,8 +18,11 @@ function DayCell({ entry, personId, date, onResolve, isActive, onMouseEnter }) {
   const total = wh + th
   const over = total > 8
 
+  const eventNames = [...new Set(entry.timeOffBookings.map(b => b.event_name).filter(Boolean))].join(', ')
+  const tooltip = eventNames || undefined
+
   return (
-    <td className={`${base} ${cellClass(wh, th)}`} onMouseEnter={onMouseEnter}>
+    <td className={`${base} ${cellClass(wh, th)}`} onMouseEnter={onMouseEnter} title={tooltip}>
       <div className="cell-content">
         {wh > 0 && <div className="cell-hours cell-hours-work">{wh}h</div>}
         {th > 0 && <div className="cell-hours cell-hours-timeoff">{th}h off</div>}

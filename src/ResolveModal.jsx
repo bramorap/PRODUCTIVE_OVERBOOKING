@@ -1,28 +1,31 @@
 import { useMemo } from 'react'
-import { computeSegments, getOverlappingTimeOffDays, formatDateLong, getWorkDays } from './utils'
+import { computeSegments, getTimeOffByDay, getWorkDays, formatDateLong } from './utils'
 
 export default function ResolveModal({ target, people, allTimeOffBookings, onConfirm, onClose, resolving }) {
   const { personId, date, workBookings, timeOffBookings } = target
   const person = people[personId]
 
-  // For each work booking, find all overlapping time-off days and compute segments
   const plans = useMemo(() => {
     return workBookings.map(wb => {
-      const timeOffDays = getOverlappingTimeOffDays(wb, allTimeOffBookings)
-      const segments = computeSegments(wb, timeOffDays)
-      return { workBooking: wb, timeOffDays, segments }
+      const timeOffByDay = getTimeOffByDay(wb, allTimeOffBookings)
+      const segments = computeSegments(wb, timeOffByDay)
+      const timeOffDays = Object.keys(timeOffByDay).sort()
+      return { workBooking: wb, timeOffByDay, timeOffDays, segments }
     })
   }, [workBookings, allTimeOffBookings])
 
   const totalWork = workBookings.reduce((s, b) => s + b.hours_per_day, 0)
   const totalTimeOff = timeOffBookings.reduce((s, b) => s + b.hours_per_day, 0)
 
+  // Collect unique event names for display
+  const eventNames = [...new Set(timeOffBookings.map(b => b.event_name).filter(Boolean))]
+
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && !resolving && onClose()}>
       <div className="modal modal-resolve">
         <div className="modal-header">
           <h2>Resolve Overbooking</h2>
-          {!resolving && <button className="modal-close" onClick={onClose}>x</button>}
+          {!resolving && <button className="modal-close" onClick={onClose}>✕</button>}
         </div>
 
         <div className="resolve-person">
@@ -37,7 +40,7 @@ export default function ResolveModal({ target, people, allTimeOffBookings, onCon
           </div>
           <div className="resolve-row">
             <span className="tag tag-timeoff">Time off</span>
-            <span>{totalTimeOff}h/day</span>
+            <span>{totalTimeOff}h/day{eventNames.length > 0 && <span className="event-name-tag"> · {eventNames.join(', ')}</span>}</span>
           </div>
           <div className="resolve-row resolve-total">
             <span>Total</span>
@@ -47,7 +50,7 @@ export default function ResolveModal({ target, people, allTimeOffBookings, onCon
 
         <div className="resolve-plans">
           <h3>Resolution plan</h3>
-          {plans.map(({ workBooking, timeOffDays, segments }) => (
+          {plans.map(({ workBooking, timeOffByDay, timeOffDays, segments }) => (
             <div key={workBooking.id} className="plan-card">
               <div className="plan-booking-name">
                 {workBooking.service_name || `Booking #${workBooking.id}`}
@@ -56,7 +59,12 @@ export default function ResolveModal({ target, people, allTimeOffBookings, onCon
 
               {timeOffDays.length > 0 && (
                 <div className="plan-timeoff-days">
-                  Time-off days within booking: {timeOffDays.join(', ')}
+                  Time-off within booking:{' '}
+                  {timeOffDays.map(d => (
+                    <span key={d} className="plan-timeoff-day">
+                      {d}{timeOffByDay[d] < workBooking.hours_per_day ? ` (${timeOffByDay[d]}h)` : ''}
+                    </span>
+                  ))}
                 </div>
               )}
 
@@ -69,7 +77,10 @@ export default function ResolveModal({ target, people, allTimeOffBookings, onCon
                     {segments.map((seg, i) => (
                       <div key={i} className="plan-segment">
                         {i + 1}. {seg.started_on} → {seg.ended_on}
-                        <span className="plan-days"> ({getWorkDays(seg.started_on, seg.ended_on).length} work days)</span>
+                        {seg.hours_override !== undefined
+                          ? <span className="plan-days"> (1 day · {seg.hours_override}h — partial day)</span>
+                          : <span className="plan-days"> ({getWorkDays(seg.started_on, seg.ended_on).length} work days)</span>
+                        }
                       </div>
                     ))}
                   </>
@@ -82,7 +93,7 @@ export default function ResolveModal({ target, people, allTimeOffBookings, onCon
         <div className="form-actions">
           <button className="btn-secondary" onClick={onClose} disabled={resolving}>Cancel</button>
           <button className="btn-danger" onClick={onConfirm} disabled={resolving}>
-            {resolving ? 'Resolving...' : 'Resolve Overbooking'}
+            {resolving ? 'Resolving…' : 'Resolve Overbooking'}
           </button>
         </div>
       </div>

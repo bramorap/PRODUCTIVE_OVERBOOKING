@@ -204,6 +204,13 @@ export function parseBookingsResponse(data, included = []) {
       serviceName = includedByTypeId.services[serviceId].attributes?.name || null
     }
 
+    // Collect event name (time-off type: "Vacation", "Sick Leave", "Easter Monday", etc.)
+    let eventName = null
+    if (eventId && includedByTypeId.events?.[eventId]) {
+      const evAttrs = includedByTypeId.events[eventId].attributes || {}
+      eventName = evAttrs.name || evAttrs.time_off_type_name || evAttrs.title || null
+    }
+
     // Normalise hours per day
     const method = a.booking_method_id
     let hoursPerDay
@@ -234,6 +241,7 @@ export function parseBookingsResponse(data, included = []) {
       note: a.note,
       is_time_off: !!eventId,
       service_name: serviceName,
+      event_name: eventName,
     }
   })
 
@@ -275,42 +283,64 @@ export function getPersonIds(bookings) {
   return [...new Set(bookings.map(b => b.person_id).filter(Boolean))]
 }
 
-// Given a work booking and a set of time-off date strings, compute remaining segments
-export function computeSegments(workBooking, timeOffDays) {
+// Returns {day: totalTimeOffHours} for all days within the work booking that have time-off
+export function getTimeOffByDay(workBooking, timeOffBookings) {
+  const map = {}
+  for (const tob of timeOffBookings) {
+    if (tob.person_id !== workBooking.person_id) continue
+    const overlapStart = workBooking.started_on > tob.started_on ? workBooking.started_on : tob.started_on
+    const overlapEnd   = workBooking.ended_on   < tob.ended_on   ? workBooking.ended_on   : tob.ended_on
+    if (overlapStart > overlapEnd) continue
+    for (const d of getWorkDays(overlapStart, overlapEnd)) {
+      map[d] = (map[d] || 0) + tob.hours_per_day
+    }
+  }
+  return map
+}
+
+// Collect ALL time-off days that overlap a given work booking (for display)
+export function getOverlappingTimeOffDays(workBooking, allTimeOffBookings) {
+  return Object.keys(getTimeOffByDay(workBooking, allTimeOffBookings)).sort()
+}
+
+// Compute segments for recreating a work booking with time-off days removed/reduced.
+// timeOffByDay: {day: totalTimeOffHours} from getTimeOffByDay().
+// Partial days (timeOff < workHours) get a 1-day segment with hours_override = workHours - timeOffHours.
+// Full days (timeOff >= workHours) are skipped entirely.
+export function computeSegments(workBooking, timeOffByDay) {
   const wdays = getWorkDays(workBooking.started_on, workBooking.ended_on)
-  const skipSet = new Set(timeOffDays)
 
   const segments = []
   let segStart = null
   let segEnd = null
 
+  const flush = () => {
+    if (segStart !== null) {
+      segments.push({ started_on: segStart, ended_on: segEnd })
+      segStart = null
+      segEnd = null
+    }
+  }
+
   for (const day of wdays) {
-    if (!skipSet.has(day)) {
+    const timeOffH = timeOffByDay[day] || 0
+    if (timeOffH === 0) {
+      // Normal working day — extend current segment
       if (segStart === null) segStart = day
       segEnd = day
     } else {
-      if (segStart !== null) {
-        segments.push({ started_on: segStart, ended_on: segEnd })
-        segStart = null
-        segEnd = null
+      const remaining = workBooking.hours_per_day - timeOffH
+      if (remaining > 0) {
+        // Partial day: flush running segment, add a single-day segment with reduced hours
+        flush()
+        segments.push({ started_on: day, ended_on: day, hours_override: remaining })
+      } else {
+        // Full time-off: skip the day entirely
+        flush()
       }
     }
   }
-  if (segStart !== null) segments.push({ started_on: segStart, ended_on: segEnd })
+  flush()
 
   return segments
-}
-
-// Collect ALL time-off days that overlap a given work booking (across all time-off bookings for that person)
-export function getOverlappingTimeOffDays(workBooking, allTimeOffBookings) {
-  const days = new Set()
-  for (const tob of allTimeOffBookings) {
-    if (tob.person_id !== workBooking.person_id) continue
-    const overlap = getWorkDays(
-      workBooking.started_on > tob.started_on ? workBooking.started_on : tob.started_on,
-      workBooking.ended_on < tob.ended_on ? workBooking.ended_on : tob.ended_on,
-    )
-    overlap.forEach(d => days.add(d))
-  }
-  return [...days].sort()
 }

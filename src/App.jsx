@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   fetchWorkBookings, fetchTimeOffBookings, resolveOverbooking,
-  fetchAllWorkBookings, fetchAllTimeOffForPersons,
+  fetchAllWorkBookings,
   fetchProjects,
 } from './api'
 import {
   getZoomedRange, getZoomColumns, getWorkDays,
-  getPersonIds, getOverlappingTimeOffDays, computeSegments,
+  getPersonIds, getOverlappingTimeOffDays, getTimeOffByDay, computeSegments,
   buildPersonDayMap, buildPersonPeriodMap,
 } from './utils'
 import BookingsGrid from './BookingsGrid'
@@ -17,6 +17,14 @@ import SettingsPanel from './SettingsPanel'
 const DEFAULT_CONFIG = {
   apiToken: '',
   orgId: '52239',
+  excludedEventNames: '',
+}
+
+function filterExcludedEvents(bookings, config) {
+  const excluded = (config.excludedEventNames || '')
+    .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+  if (excluded.length === 0) return bookings
+  return bookings.filter(b => !b.event_name || !excluded.includes(b.event_name.toLowerCase()))
 }
 
 const ZOOM_LEVELS = [
@@ -145,7 +153,7 @@ export default function App() {
       const personIds = getPersonIds(wb)
       if (personIds.length > 0) {
         const { bookings: tob, people: top } = await fetchTimeOffBookings(config, personIds, range.start, range.end)
-        setTimeOffBookings(tob)
+        setTimeOffBookings(filterExcludedEvents(tob, config))
         setPeople(prev => ({ ...prev, ...top }))
       } else {
         setTimeOffBookings([])
@@ -184,10 +192,15 @@ export default function App() {
     setResolving(true)
     setError(null)
     try {
-      const { bookings: allTimeOff } = await fetchAllTimeOffForPersons(config, [resolveTarget.personId])
       for (const wb of resolveTarget.workBookings) {
-        const timeOffDays = getOverlappingTimeOffDays(wb, allTimeOff)
-        const segments = computeSegments(wb, timeOffDays)
+        // Scope time-off fetch to this work booking's exact date range — avoids
+        // pulling in future absences outside the booking period and over-splitting.
+        const { bookings: timeOffInRange } = await fetchTimeOffBookings(
+          config, [resolveTarget.personId], wb.started_on, wb.ended_on
+        )
+        const filteredTimeOff = filterExcludedEvents(timeOffInRange, config)
+        const timeOffByDay = getTimeOffByDay(wb, filteredTimeOff)
+        const segments = computeSegments(wb, timeOffByDay)
         await resolveOverbooking(config, wb, segments)
       }
       setResolveTarget(null)
@@ -227,7 +240,11 @@ export default function App() {
         b.started_on <= bulkTarget.periodEnd && b.ended_on >= bulkTarget.periodStart
       )
       const personIds = [...new Set(scopedWork.map(b => b.person_id).filter(Boolean))]
-      const { bookings: allTimeOff } = await fetchAllTimeOffForPersons(config, personIds)
+      // Scope time-off to the union date range of all work bookings being resolved
+      const minStart = scopedWork.reduce((m, b) => b.started_on < m ? b.started_on : m, scopedWork[0].started_on)
+      const maxEnd   = scopedWork.reduce((m, b) => b.ended_on   > m ? b.ended_on   : m, scopedWork[0].ended_on)
+      const { bookings: rawTimeOff } = await fetchTimeOffBookings(config, personIds, minStart, maxEnd)
+      const allTimeOff = filterExcludedEvents(rawTimeOff, config)
       const toResolve = scopedWork.filter(wb => getOverlappingTimeOffDays(wb, allTimeOff).length > 0)
       if (toResolve.length === 0) {
         setBulkProgress(null)
@@ -239,7 +256,7 @@ export default function App() {
       for (let i = 0; i < toResolve.length; i++) {
         setBulkProgress({ current: i + 1, total: toResolve.length, msg: `Resolving ${i + 1} / ${toResolve.length}…` })
         const wb = toResolve[i]
-        await resolveOverbooking(config, wb, computeSegments(wb, getOverlappingTimeOffDays(wb, allTimeOff)))
+        await resolveOverbooking(config, wb, computeSegments(wb, getTimeOffByDay(wb, allTimeOff)))
       }
       setBulkProgress(null)
       showSuccess(`Done! Resolved ${toResolve.length} overbooked booking(s).`)

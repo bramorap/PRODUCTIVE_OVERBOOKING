@@ -1,4 +1,4 @@
-import { parseBookingsResponse } from './utils'
+import { parseBookingsResponse, getWorkDays } from './utils'
 
 function makeHeaders(config) {
   return {
@@ -120,18 +120,35 @@ export async function deleteBooking(config, bookingId) {
   })
 }
 
-// Create a new work booking (copy of an existing one with new dates)
-export async function createBooking(config, booking, startedOn, endedOn) {
+// Create a new work booking. hoursOverride allows partial-day segments (e.g. half-day time-off).
+export async function createBooking(config, booking, startedOn, endedOn, hoursOverride) {
+  const method = booking.booking_method_id || 1
+  let hoursOrPct
+  if (method === 2) {
+    if (hoursOverride !== undefined) {
+      // Partial day: scale percentage proportionally
+      const pct = Math.round((booking.percentage || 100) * hoursOverride / (booking.hours_per_day || 8))
+      hoursOrPct = { percentage: pct }
+    } else {
+      hoursOrPct = { percentage: booking.percentage }
+    }
+  } else if (method === 3) {
+    const hpd = hoursOverride !== undefined ? hoursOverride : booking.hours_per_day
+    const segDays = getWorkDays(startedOn, endedOn).length
+    hoursOrPct = { total_time: Math.round(hpd * 60 * segDays) }
+  } else {
+    const h = hoursOverride !== undefined ? hoursOverride : (booking.hours ?? booking.hours_per_day)
+    hoursOrPct = { hours: h }
+  }
+
   const body = {
     data: {
       type: 'bookings',
       attributes: {
         started_on: startedOn,
         ended_on: endedOn,
-        booking_method_id: booking.booking_method_id || 1,
-        ...(booking.booking_method_id === 2
-          ? { percentage: booking.percentage }
-          : { hours: booking.hours }),
+        booking_method_id: method,
+        ...hoursOrPct,
         ...(booking.note && { note: booking.note }),
       },
       relationships: {
@@ -153,8 +170,7 @@ export async function resolveOverbooking(config, workBooking, segments) {
   // Delete the original work booking
   await deleteBooking(config, workBooking.id)
 
-  // Create new bookings for each non-time-off segment
   for (const seg of segments) {
-    await createBooking(config, workBooking, seg.started_on, seg.ended_on)
+    await createBooking(config, workBooking, seg.started_on, seg.ended_on, seg.hours_override)
   }
 }
