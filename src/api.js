@@ -165,11 +165,19 @@ export async function createBooking(config, booking, startedOn, endedOn, hoursOv
   })
 }
 
-// Resolve overbooking: delete the work booking and recreate it in segments
-export async function resolveOverbooking(config, workBooking, segments) {
-  // Delete the original work booking
+// Resolve overbooking: delete the work booking and recreate it in segments.
+// opts.skipIfEmpty: if true, silently skip instead of throwing when all days are time-off.
+export async function resolveOverbooking(config, workBooking, segments, opts = {}) {
+  if (segments.length === 0) {
+    if (opts.skipIfEmpty) return
+    const name = workBooking.service_name || `booking ${workBooking.id}`
+    throw new Error(
+      `Cannot resolve "${name}" (${workBooking.started_on} – ${workBooking.ended_on}): ` +
+      `all working days are covered by time-off — the booking would be entirely deleted. ` +
+      `Please handle this manually in Productive.`
+    )
+  }
   await deleteBooking(config, workBooking.id)
-
   for (const seg of segments) {
     await createBooking(config, workBooking, seg.started_on, seg.ended_on, seg.hours_override)
   }

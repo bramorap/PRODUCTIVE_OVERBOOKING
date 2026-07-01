@@ -649,6 +649,7 @@ button:active:not(:disabled) { transform: scale(0.96); }
 .plan-segment { padding: 3px 10px; background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.2); border-radius: 4px; color: #86efac; font-size: 12px; }
 .plan-days { color: rgba(255,255,255,0.35); }
 .plan-delete { color: #fca5a5; font-style: italic; }
+.plan-delete-warning { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.4); border-radius: 6px; padding: 8px 12px; color: #fca5a5; font-size: 12px; line-height: 1.5; }
 .event-name-tag { font-size: 11px; color: rgba(255,255,255,0.45); font-style: italic; }
 
 /* ── Bulk progress ── */

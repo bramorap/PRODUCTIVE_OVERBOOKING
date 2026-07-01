@@ -19,6 +19,7 @@ export default function ResolveModal({ target, people, allTimeOffBookings, onCon
 
   // Collect unique event names for display
   const eventNames = [...new Set(timeOffBookings.map(b => b.event_name).filter(Boolean))]
+  const hasEmptySegments = plans.some(p => p.segments.length === 0)
 
   return (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && !resolving && onClose()}>
@@ -70,7 +71,9 @@ export default function ResolveModal({ target, people, allTimeOffBookings, onCon
 
               <div className="plan-segments">
                 {segments.length === 0 ? (
-                  <span className="plan-delete">Will delete this booking (entire range is time-off)</span>
+                  <div className="plan-delete-warning">
+                    ⚠️ All working days are covered by time-off — this booking would be <strong>entirely deleted</strong>. Resolve is blocked. Handle manually in Productive.
+                  </div>
                 ) : (
                   <>
                     <span className="plan-label">Will be replaced by {segments.length} segment{segments.length > 1 ? 's' : ''}:</span>
@@ -92,7 +95,7 @@ export default function ResolveModal({ target, people, allTimeOffBookings, onCon
 
         <div className="form-actions">
           <button className="btn-secondary" onClick={onClose} disabled={resolving}>Cancel</button>
-          <button className="btn-danger" onClick={onConfirm} disabled={resolving}>
+          <button className="btn-danger" onClick={onConfirm} disabled={resolving || hasEmptySegments}>
             {resolving ? 'Resolving…' : 'Resolve Overbooking'}
           </button>
         </div>

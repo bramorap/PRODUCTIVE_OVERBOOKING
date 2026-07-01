@@ -256,7 +256,7 @@ export default function App() {
       for (let i = 0; i < toResolve.length; i++) {
         setBulkProgress({ current: i + 1, total: toResolve.length, msg: `Resolving ${i + 1} / ${toResolve.length}…` })
         const wb = toResolve[i]
-        await resolveOverbooking(config, wb, computeSegments(wb, getTimeOffByDay(wb, allTimeOff)))
+        await resolveOverbooking(config, wb, computeSegments(wb, getTimeOffByDay(wb, allTimeOff)), { skipIfEmpty: true })
       }
       setBulkProgress(null)
       showSuccess(`Done! Resolved ${toResolve.length} overbooked booking(s).`)
